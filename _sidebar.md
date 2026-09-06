@@ -1,2 +1,2 @@
-* [首页](README.md)
-* [第一集完整对白](transcript.md)
+* [完整对白](transcript.md)
+* [首页说明](README.md)
