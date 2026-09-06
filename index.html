@@ -104,7 +104,7 @@
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
 
   <script>
-    // ==================== 1. 字体大小 ====================
+    // ==================== 1. 字体大小调节 ====================
     let currentSize = parseInt(localStorage.getItem('lie-font-size')) || 16;
     document.documentElement.style.setProperty('--font-size', currentSize + 'px');
     document.getElementById('font-size-label').textContent = currentSize;
@@ -116,9 +116,10 @@
       localStorage.setItem('lie-font-size', currentSize);
     }
 
-    // ==================== 高亮工具 ====================
+    // ==================== 高亮功能 ====================
     const toolbar = document.getElementById('word-toolbar');
     let isOverToolbar = false;
+    let hoverTimer = null;
 
     function showToolbar(x, y) {
       toolbar.style.display = 'flex';
@@ -127,10 +128,15 @@
     }
 
     function hideToolbar() {
-      if (!isOverToolbar) toolbar.style.display = 'none';
+      if (!isOverToolbar) {
+        toolbar.style.display = 'none';
+      }
     }
 
-    toolbar.addEventListener('mouseenter', () => isOverToolbar = true);
+    toolbar.addEventListener('mouseenter', () => {
+      isOverToolbar = true;
+      clearTimeout(hoverTimer);
+    });
     toolbar.addEventListener('mouseleave', () => {
       isOverToolbar = false;
       hideToolbar();
@@ -170,36 +176,6 @@
       hideToolbar();
     }
 
-    // Ctrl+拖选切换高亮
-    function toggleHighlight() {
-      const sel = window.getSelection();
-      if (!sel.rangeCount || sel.isCollapsed) return;
-
-      const range = sel.getRangeAt(0);
-      let node = range.commonAncestorContainer;
-      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-      const existing = node.closest('mark, .highlight');
-
-      if (existing && existing.textContent.trim() === sel.toString().trim()) {
-        const parent = existing.parentNode;
-        while (existing.firstChild) parent.insertBefore(existing.firstChild, existing);
-        parent.removeChild(existing);
-      } else {
-        const mark = document.createElement('mark');
-        try {
-          range.surroundContents(mark);
-        } catch (e) {
-          const span = document.createElement('span');
-          span.className = 'highlight';
-          span.appendChild(range.extractContents());
-          range.insertNode(span);
-        }
-      }
-      sel.removeAllRanges();
-      hideToolbar();
-      saveHighlights();
-    }
-
     function saveHighlights() {
       const section = document.querySelector('.markdown-section');
       if (!section) return;
@@ -217,67 +193,50 @@
       if (data[path]) section.innerHTML = data[path];
     }
 
-    // ==================== 2. 双击选词并弹出菜单 ====================
-    document.addEventListener('dblclick', function(e) {
-      const section = document.querySelector('.markdown-section');
-      if (!section || !section.contains(e.target)) return;
+    // ==================== 3. 鼠标在选中内容上停留超过 0.5 秒弹出菜单 ====================
+    document.addEventListener('mousemove', function(e) {
+      if (isOverToolbar) return;
 
-      // 双击后浏览器已经选中了单词，我们只需弹出菜单
-      setTimeout(() => {
-        const sel = window.getSelection();
-        if (sel.rangeCount && !sel.isCollapsed) {
-          const range = sel.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          showToolbar(rect.left + rect.width / 2 + window.scrollX,
-                      rect.top + window.scrollY);
+      const sel = window.getSelection();
+      // 没有选中内容时直接隐藏
+      if (!sel.rangeCount || sel.isCollapsed) {
+        clearTimeout(hoverTimer);
+        hideToolbar();
+        return;
+      }
+
+      // 检查鼠标是否在选中区域内
+      const range = sel.getRangeAt(0);
+      const rects = range.getClientRects();
+      let isOverSelection = false;
+
+      for (let rect of rects) {
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top  && e.clientY <= rect.bottom) {
+          isOverSelection = true;
+          break;
         }
-      }, 10);
-    });
-
-    // 点击其他地方关闭菜单
-    document.addEventListener('click', function(e) {
-      if (!toolbar.contains(e.target)) {
-        setTimeout(hideToolbar, 50);
       }
-    });
 
-    // ==================== 3. Ctrl + 拖选自动切换高亮 ====================
-    let ctrlPressed = false;
-    let isDragging = false;
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Control') ctrlPressed = true;
-    });
-    document.addEventListener('keyup', e => {
-      if (e.key === 'Control') ctrlPressed = false;
-    });
-    window.addEventListener('blur', () => ctrlPressed = false);
-
-    document.addEventListener('mousedown', e => {
-      if (e.button === 0) isDragging = false;
-    });
-
-    document.addEventListener('mousemove', e => {
-      if (e.buttons === 1) isDragging = true;
-    });
-
-    document.addEventListener('mouseup', e => {
-      if (e.button !== 0) return;
-
-      if (ctrlPressed && isDragging) {
-        setTimeout(() => {
-          const sel = window.getSelection();
-          if (sel.rangeCount && !sel.isCollapsed) {
-            const section = document.querySelector('.markdown-section');
-            if (section && section.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-              toggleHighlight();
-            }
+      if (isOverSelection) {
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => {
+          // 再次确认还有选中内容
+          const currentSel = window.getSelection();
+          if (currentSel.rangeCount && !currentSel.isCollapsed) {
+            const r = currentSel.getRangeAt(0);
+            const rect = r.getBoundingClientRect();
+            showToolbar(rect.left + rect.width / 2 + window.scrollX,
+                        rect.top + window.scrollY);
           }
-        }, 10);
+        }, 500); // 停留 0.5 秒
+      } else {
+        clearTimeout(hoverTimer);
+        hideToolbar();
       }
     });
 
-    // 页面切换恢复高亮
+    // 页面切换时恢复高亮
     window.addEventListener('hashchange', () => {
       hideToolbar();
       setTimeout(restoreHighlights, 300);
