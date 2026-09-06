@@ -115,7 +115,7 @@
       localStorage.setItem('lie-font-size', currentSize);
     }
 
-    // 高亮相关
+    // 高亮函数
     function highlightSelection() {
       const selection = window.getSelection();
       if (!selection.rangeCount || selection.isCollapsed) return;
@@ -150,7 +150,7 @@
       hideToolbar();
     }
 
-    // 拖选后切换高亮
+    // 仅在 Ctrl+拖选时使用的切换高亮
     function toggleHighlightOnSelection() {
       const selection = window.getSelection();
       if (!selection.rangeCount || selection.isCollapsed) return;
@@ -197,7 +197,7 @@
       if (data[path]) section.innerHTML = data[path];
     }
 
-    // ========== 核心逻辑 ==========
+    // 状态
     let hoverSelectEnabled = localStorage.getItem('lie-hover-select') === 'true';
     const toolbar = document.getElementById('word-toolbar');
     let isOverToolbar = false;
@@ -233,17 +233,16 @@
       hideToolbar();
     });
 
-    // 监听 Ctrl 键
+    // Ctrl 键监听
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Control') ctrlPressed = true;
     });
     document.addEventListener('keyup', (e) => {
       if (e.key === 'Control') ctrlPressed = false;
     });
-    // 窗口失焦时重置
     window.addEventListener('blur', () => { ctrlPressed = false; });
 
-    // 鼠标按下
+    // 鼠标事件
     document.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       isMouseDown = true;
@@ -255,12 +254,11 @@
       if (isMouseDown) hasDragged = true;
     });
 
-    // 鼠标松开
     document.addEventListener('mouseup', (e) => {
       if (e.button !== 0) return;
       isMouseDown = false;
 
-      // 只有按住 Ctrl + 拖选时，才自动切换高亮
+      // 只有按住 Ctrl 并且拖选时，才自动切换高亮
       if (ctrlPressed && hasDragged) {
         setTimeout(() => {
           const sel = window.getSelection();
@@ -272,9 +270,10 @@
           }
         }, 10);
       }
+      // 注意：普通拖选（没有 Ctrl）什么都不做，只保留选中状态
     });
 
-    // 点击弹出菜单（仅在非 Ctrl、非拖选时）
+    // 点击弹出菜单（仅非 Ctrl、非拖选）
     document.addEventListener('click', (e) => {
       if (!hoverSelectEnabled || ctrlPressed || hasDragged) return;
       if (toolbar.contains(e.target)) return;
@@ -294,7 +293,7 @@
       }
     });
 
-    // 悬停自动选词（Ctrl 按下时完全禁用）
+    // 悬停选词（Ctrl 按下时禁用）
     function selectWordAtPoint(x, y) {
       if (isMouseDown || ctrlPressed) return;
 
