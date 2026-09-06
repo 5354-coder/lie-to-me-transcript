@@ -18,6 +18,7 @@
       padding: 1px 2px;
       border-radius: 2px;
     }
+    /* 右上角只保留字体和悬停开关 */
     #controls {
       position: fixed;
       top: 12px;
@@ -48,20 +49,47 @@
       min-width: 36px;
       text-align: center;
     }
-    /* 悬停选词时的提示 */
-    .hover-select-active {
+    /* 单词上方弹出的小工具条 */
+    #word-toolbar {
+      position: absolute;
+      display: none;
+      background: #333;
+      color: #fff;
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 13px;
+      z-index: 9999;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+      gap: 4px;
+      align-items: center;
+    }
+    #word-toolbar button {
+      background: transparent;
+      border: 1px solid #666;
+      color: #fff;
+      border-radius: 4px;
+      padding: 2px 8px;
       cursor: pointer;
+      font-size: 13px;
+    }
+    #word-toolbar button:hover {
+      background: #555;
     }
   </style>
 </head>
 <body>
+  <!-- 右上角只保留字体调节和悬停开关 -->
   <div id="controls">
     <button onclick="changeFont(-1)" title="缩小字体">A-</button>
     <span id="font-size-label">16</span>
     <button onclick="changeFont(1)" title="放大字体">A+</button>
-    <button onclick="highlightSelection()" title="高亮选中文字 (或按 H 键)">高亮</button>
-    <button onclick="clearHighlights()" title="清除所有高亮">清除</button>
     <button id="hover-btn" onclick="toggleHoverSelect()" title="开启/关闭悬停选词">悬停选词: 关</button>
+  </div>
+
+  <!-- 单词上方弹出的工具条 -->
+  <div id="word-toolbar">
+    <button onclick="highlightSelection()">高亮</button>
+    <button onclick="clearCurrentHighlight()">取消高亮</button>
   </div>
 
   <div id="app">加载中...</div>
@@ -90,7 +118,7 @@
       localStorage.setItem('lie-font-size', currentSize);
     }
 
-    // ========== 高亮功能 ==========
+    // ========== 高亮相关 ==========
     function highlightSelection() {
       const selection = window.getSelection();
       if (!selection.rangeCount || selection.isCollapsed) return;
@@ -106,16 +134,31 @@
         range.insertNode(span);
       }
       selection.removeAllRanges();
+      hideToolbar();
       saveHighlights();
     }
 
-    document.addEventListener('keydown', function(e) {
-      if (e.key.toLowerCase() === 'h' && !e.ctrlKey && !e.metaKey) {
-        const active = document.activeElement;
-        if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') return;
-        highlightSelection();
+    // 取消当前选中单词的高亮（如果它已经被高亮）
+    function clearCurrentHighlight() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+
+      let node = selection.anchorNode;
+      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+
+      // 找到最近的 mark 或 .highlight
+      const highlightEl = node.closest('mark, .highlight');
+      if (highlightEl) {
+        const parent = highlightEl.parentNode;
+        while (highlightEl.firstChild) {
+          parent.insertBefore(highlightEl.firstChild, highlightEl);
+        }
+        parent.removeChild(highlightEl);
+        saveHighlights();
       }
-    });
+      selection.removeAllRanges();
+      hideToolbar();
+    }
 
     function saveHighlights() {
       const section = document.querySelector('.markdown-section');
@@ -136,36 +179,33 @@
       }
     }
 
-    function clearHighlights() {
-      const section = document.querySelector('.markdown-section');
-      if (!section) return;
-      section.querySelectorAll('mark, .highlight').forEach(el => {
-        const parent = el.parentNode;
-        while (el.firstChild) parent.insertBefore(el.firstChild, el);
-        parent.removeChild(el);
-      });
-      saveHighlights();
-    }
-
-    // ========== 悬停自动选中单词 ==========
+    // ========== 悬停自动选词 + 弹出工具条 ==========
     let hoverSelectEnabled = localStorage.getItem('lie-hover-select') === 'true';
+    const toolbar = document.getElementById('word-toolbar');
 
     function toggleHoverSelect() {
       hoverSelectEnabled = !hoverSelectEnabled;
       localStorage.setItem('lie-hover-select', hoverSelectEnabled);
       updateHoverButton();
-      const section = document.querySelector('.markdown-section');
-      if (section) {
-        section.classList.toggle('hover-select-active', hoverSelectEnabled);
-      }
+      if (!hoverSelectEnabled) hideToolbar();
     }
 
     function updateHoverButton() {
-      const btn = document.getElementById('hover-btn');
-      btn.textContent = '悬停选词: ' + (hoverSelectEnabled ? '开' : '关');
+      document.getElementById('hover-btn').textContent =
+        '悬停选词: ' + (hoverSelectEnabled ? '开' : '关');
     }
 
-    // 根据鼠标位置选中单词
+    function showToolbar(x, y) {
+      toolbar.style.display = 'flex';
+      // 显示在单词上方
+      toolbar.style.left = (x - toolbar.offsetWidth / 2) + 'px';
+      toolbar.style.top = (y - 40) + 'px';
+    }
+
+    function hideToolbar() {
+      toolbar.style.display = 'none';
+    }
+
     function selectWordAtPoint(x, y) {
       let range;
       if (document.caretRangeFromPoint) {
@@ -184,14 +224,8 @@
       let start = range.startOffset;
       let end = start;
 
-      // 向左找到单词边界
-      while (start > 0 && /[\w''-]/.test(text[start - 1])) {
-        start--;
-      }
-      // 向右找到单词边界
-      while (end < text.length && /[\w''-]/.test(text[end])) {
-        end++;
-      }
+      while (start > 0 && /[\w''-]/.test(text[start - 1])) start--;
+      while (end < text.length && /[\w''-]/.test(text[end])) end++;
 
       if (start === end) return;
 
@@ -201,37 +235,46 @@
       wordRange.setStart(node, start);
       wordRange.setEnd(node, end);
       sel.addRange(wordRange);
+
+      // 计算单词位置，显示工具条
+      const rect = wordRange.getBoundingClientRect();
+      showToolbar(rect.left + rect.width / 2 + window.scrollX,
+                  rect.top + window.scrollY);
     }
 
-    // 监听鼠标移动
+    // 鼠标移动时选词
     let hoverTimer = null;
     document.addEventListener('mousemove', function(e) {
       if (!hoverSelectEnabled) return;
       const section = document.querySelector('.markdown-section');
-      if (!section || !section.contains(e.target)) return;
+      if (!section || !section.contains(e.target)) {
+        hideToolbar();
+        return;
+      }
 
       clearTimeout(hoverTimer);
       hoverTimer = setTimeout(() => {
         selectWordAtPoint(e.clientX, e.clientY);
-      }, 80); // 轻微延迟，避免太灵敏
+      }, 100);
     });
 
-    // 页面切换后恢复
+    // 点击其他地方时隐藏工具条
+    document.addEventListener('mousedown', function(e) {
+      if (!toolbar.contains(e.target)) {
+        // 延迟一点，避免点工具条按钮时立刻消失
+        setTimeout(hideToolbar, 150);
+      }
+    });
+
+    // 页面切换
     window.addEventListener('hashchange', function() {
-      setTimeout(() => {
-        restoreHighlights();
-        const section = document.querySelector('.markdown-section');
-        if (section) section.classList.toggle('hover-select-active', hoverSelectEnabled);
-      }, 300);
+      hideToolbar();
+      setTimeout(restoreHighlights, 300);
     });
 
     // 初始化
     updateHoverButton();
-    setTimeout(() => {
-      restoreHighlights();
-      const section = document.querySelector('.markdown-section');
-      if (section) section.classList.toggle('hover-select-active', hoverSelectEnabled);
-    }, 800);
+    setTimeout(restoreHighlights, 800);
   </script>
 </body>
 </html>
