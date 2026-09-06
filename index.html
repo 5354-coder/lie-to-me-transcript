@@ -5,9 +5,64 @@
   <title>Lie to Me 对白</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  <style>
+    :root {
+      --font-size: 16px;
+    }
+    .markdown-section {
+      font-size: var(--font-size) !important;
+      line-height: 1.7;
+    }
+    /* 高亮样式 */
+    mark, .highlight {
+      background-color: #ffe066;
+      padding: 1px 2px;
+      border-radius: 2px;
+    }
+    /* 右上角控制栏 */
+    #controls {
+      position: fixed;
+      top: 12px;
+      right: 20px;
+      z-index: 100;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 6px 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 14px;
+    }
+    #controls button {
+      border: 1px solid #ccc;
+      background: #f8f8f8;
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #controls button:hover {
+      background: #eee;
+    }
+    #font-size-label {
+      min-width: 36px;
+      text-align: center;
+    }
+  </style>
 </head>
 <body>
+  <div id="controls">
+    <button onclick="changeFont(-1)" title="缩小字体">A-</button>
+    <span id="font-size-label">16</span>
+    <button onclick="changeFont(1)" title="放大字体">A+</button>
+    <button onclick="highlightSelection()" title="高亮选中文字 (或按 H 键)">高亮</button>
+    <button onclick="clearHighlights()" title="清除所有高亮">清除</button>
+  </div>
+
   <div id="app">加载中...</div>
+
   <script>
     window.$docsify = {
       name: 'Lie to Me',
@@ -18,5 +73,98 @@
     }
   </script>
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+
+  <script>
+    // ========== 字体大小调节 ==========
+    let currentSize = parseInt(localStorage.getItem('lie-font-size')) || 16;
+    document.documentElement.style.setProperty('--font-size', currentSize + 'px');
+    document.getElementById('font-size-label').textContent = currentSize;
+
+    function changeFont(delta) {
+      currentSize = Math.min(28, Math.max(12, currentSize + delta));
+      document.documentElement.style.setProperty('--font-size', currentSize + 'px');
+      document.getElementById('font-size-label').textContent = currentSize;
+      localStorage.setItem('lie-font-size', currentSize);
+    }
+
+    // ========== 高亮功能 ==========
+    function highlightSelection() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount || selection.isCollapsed) return;
+
+      const range = selection.getRangeAt(0);
+      // 只允许在正文区域高亮
+      if (!range.commonAncestorContainer.closest || 
+          !range.commonAncestorContainer.closest('.markdown-section')) {
+        // 兼容处理
+        const container = range.commonAncestorContainer.parentElement;
+        if (!container.closest('.markdown-section')) return;
+      }
+
+      const mark = document.createElement('mark');
+      try {
+        range.surroundContents(mark);
+      } catch (e) {
+        // 跨节点时用更稳妥的方式
+        const span = document.createElement('span');
+        span.className = 'highlight';
+        span.appendChild(range.extractContents());
+        range.insertNode(span);
+      }
+      selection.removeAllRanges();
+      saveHighlights();
+    }
+
+    // 按 H 键高亮
+    document.addEventListener('keydown', function(e) {
+      if (e.key.toLowerCase() === 'h' && !e.ctrlKey && !e.metaKey) {
+        const active = document.activeElement;
+        if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') return;
+        highlightSelection();
+      }
+    });
+
+    // 保存高亮到 localStorage
+    function saveHighlights() {
+      const section = document.querySelector('.markdown-section');
+      if (!section) return;
+      const html = section.innerHTML;
+      const path = location.hash || '#/';
+      let data = JSON.parse(localStorage.getItem('lie-highlights') || '{}');
+      data[path] = html;
+      localStorage.setItem('lie-highlights', JSON.stringify(data));
+    }
+
+    // 恢复高亮
+    function restoreHighlights() {
+      const section = document.querySelector('.markdown-section');
+      if (!section) return;
+      const path = location.hash || '#/';
+      const data = JSON.parse(localStorage.getItem('lie-highlights') || '{}');
+      if (data[path]) {
+        section.innerHTML = data[path];
+      }
+    }
+
+    // 清除当前页高亮
+    function clearHighlights() {
+      const section = document.querySelector('.markdown-section');
+      if (!section) return;
+      section.querySelectorAll('mark, .highlight').forEach(el => {
+        const parent = el.parentNode;
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        parent.removeChild(el);
+      });
+      saveHighlights();
+    }
+
+    // Docsify 页面切换后恢复高亮
+    window.addEventListener('hashchange', function() {
+      setTimeout(restoreHighlights, 300);
+    });
+
+    // 首次加载后也尝试恢复
+    setTimeout(restoreHighlights, 800);
+  </script>
 </body>
 </html>
