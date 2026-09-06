@@ -35,7 +35,7 @@
       background: #f0f0f0;
     }
 
-    /* 3. 文本高亮样式与悬浮菜单 */
+    /* 高亮文本样式 */
     mark.user-highlight {
       background-color: #ffeb3b;
       color: inherit;
@@ -43,31 +43,40 @@
       border-radius: 2px;
     }
 
+    /* 2. 居中且与页面融合的半透明高亮菜单 */
     .highlight-menu {
       position: absolute;
       z-index: 1000;
       display: none;
-      background: #333;
-      color: #fff;
-      border-radius: 6px;
-      padding: 6px 10px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      gap: 8px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+      padding: 4px 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      gap: 6px;
+      transform: translateX(-50%);
     }
     .highlight-menu button {
       background: transparent;
-      color: #fff;
+      color: #333;
       border: none;
       padding: 4px 8px;
       cursor: pointer;
-      border-radius: 3px;
+      border-radius: 4px;
       font-size: 13px;
+      font-weight: 500;
+      transition: background 0.2s;
     }
     .highlight-menu button:hover {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(0, 0, 0, 0.06);
+    }
+    .highlight-menu button.danger {
+      color: #d93025;
     }
     .highlight-menu button.danger:hover {
-      background: #ff4d4f;
+      background: rgba(217, 48, 37, 0.1);
     }
   </style>
 </head>
@@ -82,8 +91,8 @@
 
   <!-- 高亮/清除操作菜单 -->
   <div id="highlight-menu" class="highlight-menu">
-    <button id="btn-do-highlight">黄字高亮</button>
-    <button id="btn-clear-highlights" class="danger">清除全部历史高亮</button>
+    <button id="btn-do-highlight">高亮</button>
+    <button id="btn-clear-highlights" class="danger">清除高亮</button>
   </div>
 
   <div id="app">加载中...</div>
@@ -100,12 +109,20 @@
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
 
   <script>
-    // --- 1. 字体大小调节逻辑 ---
+    // --- 1. 仅针对右侧内容区 (.content) 的字号调节 ---
     let currentFontSize = parseInt(localStorage.getItem('user_font_size')) || 16;
     
     function updateFontSize(size) {
-      currentFontSize = Math.min(Math.max(size, 12), 32); // 限制在 12px - 32px 之间
-      document.body.style.fontSize = currentFontSize + 'px';
+      currentFontSize = Math.min(Math.max(size, 12), 32);
+      
+      let styleEl = document.getElementById('custom-font-style');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-font-style';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.innerHTML = `.content { font-size: ${currentFontSize}px !important; }`;
+      
       document.getElementById('font-size-val').innerText = currentFontSize + 'px';
       localStorage.setItem('user_font_size', currentFontSize);
     }
@@ -118,7 +135,7 @@
     // --- 2. 鼠标双击选词逻辑 ---
     document.addEventListener('dblclick', function () {
       const selection = window.getSelection();
-      if (!selection.isCollapsed) return; // 已经有选区时不重复处理
+      if (!selection.isCollapsed) return;
 
       const range = document.caretRangeFromPoint
         ? document.caretRangeFromPoint(event.clientX, event.clientY)
@@ -138,7 +155,6 @@
       const offset = range.startOffset;
       const text = textNode.nodeValue;
 
-      // 提取连续的英文单词或连字符
       let start = offset, end = offset;
       while (start > 0 && /[\w'-]/.test(text[start - 1])) start--;
       while (end < text.length && /[\w'-]/.test(text[end])) end++;
@@ -153,34 +169,36 @@
     });
 
 
-    // --- 3. 按 Ctrl 键弹出高亮/清除菜单 ---
+    // --- 3. 按 Ctrl 键弹出高亮菜单（仅保留“高亮”和“清除高亮”）---
     const menu = document.getElementById('highlight-menu');
     let savedRange = null;
 
     document.addEventListener('keydown', function (e) {
-      // 捕获 Ctrl 键（或 Mac 上的 Control 键）
       if (e.key === 'Control' || e.ctrlKey) {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed && selection.toString().trim() !== '') {
           savedRange = selection.getRangeAt(0).cloneRange();
           const rect = savedRange.getBoundingClientRect();
           
-          // 定位菜单到选中区域上方
-          menu.style.left = `${rect.left + window.scrollX}px`;
-          menu.style.top = `${rect.top + window.scrollY - 40}px`;
+          // 定位至选中文本的正中间上方
+          const middleX = rect.left + (rect.width / 2) + window.scrollX;
+          const topY = rect.top + window.scrollY - 45;
+          
+          menu.style.left = `${middleX}px`;
+          menu.style.top = `${topY}px`;
           menu.style.display = 'flex';
         }
       }
     });
 
-    // 隐藏菜单逻辑（点击页面其它地方）
+    // 点击其他位置隐藏菜单
     document.addEventListener('mousedown', function (e) {
       if (!menu.contains(e.target)) {
         menu.style.display = 'none';
       }
     });
 
-    // 执行高亮
+    // 点击“高亮”按钮
     document.getElementById('btn-do-highlight').addEventListener('click', function () {
       if (!savedRange) return;
       const mark = document.createElement('mark');
@@ -189,7 +207,6 @@
       try {
         savedRange.surroundContents(mark);
       } catch (err) {
-        // 跨节点选择时的兜底处理
         const fragment = savedRange.extractContents();
         mark.appendChild(fragment);
         savedRange.insertNode(mark);
@@ -200,7 +217,7 @@
       savedRange = null;
     });
 
-    // 彻底清除所有历史高亮
+    // 点击“清除高亮”按钮：彻底清除所有历史高亮
     document.getElementById('btn-clear-highlights').addEventListener('click', function () {
       const highlights = document.querySelectorAll('mark.user-highlight');
       highlights.forEach(mark => {
@@ -209,7 +226,7 @@
           parent.insertBefore(mark.firstChild, mark);
         }
         parent.removeChild(mark);
-        parent.normalize(); // 合并相邻的文本节点
+        parent.normalize();
       });
       
       window.getSelection().removeAllRanges();
