@@ -48,7 +48,6 @@
       min-width: 36px;
       text-align: center;
     }
-    /* 半透明工具条，更靠近单词 */
     #word-toolbar {
       position: absolute;
       display: none;
@@ -169,10 +168,11 @@
       if (data[path]) section.innerHTML = data[path];
     }
 
-    // 悬停选词 + 工具条
+    // 悬停选词
     let hoverSelectEnabled = localStorage.getItem('lie-hover-select') === 'true';
     const toolbar = document.getElementById('word-toolbar');
     let isOverToolbar = false;
+    let isMouseDown = false;          // 关键：是否正在拖选
 
     function toggleHoverSelect() {
       hoverSelectEnabled = !hoverSelectEnabled;
@@ -188,25 +188,33 @@
 
     function showToolbar(x, y) {
       toolbar.style.display = 'flex';
-      // 更靠近单词（只上移 8px）
       toolbar.style.left = Math.max(8, x - toolbar.offsetWidth / 2) + 'px';
       toolbar.style.top = (y - 28) + 'px';
     }
 
     function hideToolbar() {
-      if (!isOverToolbar) {
-        toolbar.style.display = 'none';
-      }
+      if (!isOverToolbar) toolbar.style.display = 'none';
     }
 
-    // 鼠标在工具条上时不隐藏
     toolbar.addEventListener('mouseenter', () => { isOverToolbar = true; });
     toolbar.addEventListener('mouseleave', () => {
       isOverToolbar = false;
       hideToolbar();
     });
 
+    // 记录鼠标按下/松开，区分「悬停」和「拖选」
+    document.addEventListener('mousedown', () => {
+      isMouseDown = true;
+      hideToolbar();                 // 开始拖选时先隐藏工具条
+    });
+    document.addEventListener('mouseup', () => {
+      isMouseDown = false;
+    });
+
     function selectWordAtPoint(x, y) {
+      // 正在拖选时，绝不干预
+      if (isMouseDown) return;
+
       let range;
       if (document.caretRangeFromPoint) {
         range = document.caretRangeFromPoint(x, y);
@@ -242,8 +250,8 @@
 
     let hoverTimer = null;
     document.addEventListener('mousemove', function(e) {
-      if (!hoverSelectEnabled) return;
-      if (toolbar.contains(e.target)) return; // 在工具条上时不处理
+      if (!hoverSelectEnabled || isMouseDown) return;   // 拖选时完全禁用
+      if (toolbar.contains(e.target)) return;
 
       const section = document.querySelector('.markdown-section');
       if (!section || !section.contains(e.target)) {
@@ -255,6 +263,24 @@
       hoverTimer = setTimeout(() => {
         selectWordAtPoint(e.clientX, e.clientY);
       }, 90);
+    });
+
+    // 拖选结束后，如果选中了内容，也可以弹出工具条
+    document.addEventListener('mouseup', function(e) {
+      if (!hoverSelectEnabled) return;
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (sel.rangeCount && !sel.isCollapsed) {
+          const range = sel.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          // 只有选中内容在正文区域才显示
+          const section = document.querySelector('.markdown-section');
+          if (section && section.contains(range.commonAncestorContainer)) {
+            showToolbar(rect.left + rect.width / 2 + window.scrollX,
+                        rect.top + window.scrollY);
+          }
+        }
+      }, 10);
     });
 
     window.addEventListener('hashchange', function() {
