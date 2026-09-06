@@ -1,5 +1,3 @@
-[隐藏侧栏](javascript:document.body.classList.toggle('close')) | [返回主页](#/)
-
 * **Lie to Me**
   * 第一季
     * [第1集](s01/e01.md)
