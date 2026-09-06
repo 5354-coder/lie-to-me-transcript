@@ -5,89 +5,85 @@
   <title>Lie to Me 对白</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  
   <style>
-    :root {
-      --font-size: 16px;
-    }
-    .markdown-section {
-      font-size: var(--font-size) !important;
-      line-height: 1.7;
-    }
-    mark, .highlight {
-      background-color: #ffe066;
-      padding: 1px 2px;
-      border-radius: 2px;
-    }
-    #controls {
+    /* 1. 右上角字体大小调节面板 */
+    .font-size-control {
       position: fixed;
       top: 12px;
       right: 20px;
       z-index: 100;
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 6px 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      background: rgba(255, 255, 255, 0.95);
+      padding: 6px 12px;
+      border-radius: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       display: flex;
-      gap: 8px;
       align-items: center;
+      gap: 8px;
       font-size: 14px;
+      user-select: none;
     }
-    #controls button {
+    .font-size-control button {
       border: 1px solid #ccc;
-      background: #f8f8f8;
+      background: #fff;
       border-radius: 4px;
       padding: 2px 8px;
       cursor: pointer;
-      font-size: 14px;
+      font-weight: bold;
     }
-    #controls button:hover {
-      background: #eee;
-    }
-    #font-size-label {
-      min-width: 36px;
-      text-align: center;
-    }
-    #word-toolbar {
-      position: absolute;
-      display: none;
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(6px);
-      border: 1px solid rgba(0,0,0,0.12);
-      border-radius: 8px;
-      padding: 3px 5px;
-      font-size: 13px;
-      z-index: 9999;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      gap: 4px;
-      align-items: center;
-    }
-    #word-toolbar button {
-      background: transparent;
-      border: 1px solid #ddd;
-      color: #333;
-      border-radius: 5px;
-      padding: 2px 9px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    #word-toolbar button:hover {
+    .font-size-control button:hover {
       background: #f0f0f0;
+    }
+
+    /* 3. 文本高亮样式与悬浮菜单 */
+    mark.user-highlight {
+      background-color: #ffeb3b;
+      color: inherit;
+      padding: 2px 0;
+      border-radius: 2px;
+    }
+
+    .highlight-menu {
+      position: absolute;
+      z-index: 1000;
+      display: none;
+      background: #333;
+      color: #fff;
+      border-radius: 6px;
+      padding: 6px 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      gap: 8px;
+    }
+    .highlight-menu button {
+      background: transparent;
+      color: #fff;
+      border: none;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+    .highlight-menu button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .highlight-menu button.danger:hover {
+      background: #ff4d4f;
     }
   </style>
 </head>
 <body>
-  <!-- 1. 右上角字体调节 -->
-  <div id="controls">
-    <button onclick="changeFont(-1)">A-</button>
-    <span id="font-size-label">16</span>
-    <button onclick="changeFont(1)">A+</button>
+  <!-- 字体大小控制按钮 -->
+  <div class="font-size-control">
+    <span>字号</span>
+    <button id="btn-decrease">-</button>
+    <span id="font-size-val">16px</span>
+    <button id="btn-increase">+</button>
   </div>
 
-  <!-- 高亮菜单 -->
-  <div id="word-toolbar">
-    <button onclick="doHighlight()">高亮</button>
-    <button onclick="doClearHighlight()">取消高亮</button>
+  <!-- 高亮/清除操作菜单 -->
+  <div id="highlight-menu" class="highlight-menu">
+    <button id="btn-do-highlight">黄字高亮</button>
+    <button id="btn-clear-highlights" class="danger">清除全部历史高亮</button>
   </div>
 
   <div id="app">加载中...</div>
@@ -104,145 +100,122 @@
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
 
   <script>
-    // ==================== 1. 字体大小调节 ====================
-    let currentSize = parseInt(localStorage.getItem('lie-font-size')) || 16;
-    document.documentElement.style.setProperty('--font-size', currentSize + 'px');
-    document.getElementById('font-size-label').textContent = currentSize;
-
-    function changeFont(delta) {
-      currentSize = Math.min(28, Math.max(12, currentSize + delta));
-      document.documentElement.style.setProperty('--font-size', currentSize + 'px');
-      document.getElementById('font-size-label').textContent = currentSize;
-      localStorage.setItem('lie-font-size', currentSize);
+    // --- 1. 字体大小调节逻辑 ---
+    let currentFontSize = parseInt(localStorage.getItem('user_font_size')) || 16;
+    
+    function updateFontSize(size) {
+      currentFontSize = Math.min(Math.max(size, 12), 32); // 限制在 12px - 32px 之间
+      document.body.style.fontSize = currentFontSize + 'px';
+      document.getElementById('font-size-val').innerText = currentFontSize + 'px';
+      localStorage.setItem('user_font_size', currentFontSize);
     }
 
-    // ==================== 高亮功能 ====================
-    const toolbar = document.getElementById('word-toolbar');
-    let isOverToolbar = false;
-    let hoverTimer = null;
+    document.getElementById('btn-increase').addEventListener('click', () => updateFontSize(currentFontSize + 2));
+    document.getElementById('btn-decrease').addEventListener('click', () => updateFontSize(currentFontSize - 2));
+    updateFontSize(currentFontSize);
 
-    function showToolbar(x, y) {
-      toolbar.style.display = 'flex';
-      toolbar.style.left = Math.max(8, x - toolbar.offsetWidth / 2) + 'px';
-      toolbar.style.top = (y - 28) + 'px';
-    }
 
-    function hideToolbar() {
-      if (!isOverToolbar) {
-        toolbar.style.display = 'none';
+    // --- 2. 鼠标双击选词逻辑 ---
+    document.addEventListener('dblclick', function () {
+      const selection = window.getSelection();
+      if (!selection.isCollapsed) return; // 已经有选区时不重复处理
+
+      const range = document.caretRangeFromPoint
+        ? document.caretRangeFromPoint(event.clientX, event.clientY)
+        : document.caretPositionFromPoint
+          ? (function(pos) {
+              if (!pos) return null;
+              const r = document.createRange();
+              r.setStart(pos.offsetNode, pos.offset);
+              r.collapse(true);
+              return r;
+            })(document.caretPositionFromPoint(event.clientX, event.clientY))
+          : null;
+
+      if (!range || range.startContainer.nodeType !== Node.TEXT_NODE) return;
+
+      const textNode = range.startContainer;
+      const offset = range.startOffset;
+      const text = textNode.nodeValue;
+
+      // 提取连续的英文单词或连字符
+      let start = offset, end = offset;
+      while (start > 0 && /[\w'-]/.test(text[start - 1])) start--;
+      while (end < text.length && /[\w'-]/.test(text[end])) end++;
+
+      if (start < end) {
+        const wordRange = document.createRange();
+        wordRange.setStart(textNode, start);
+        wordRange.setEnd(textNode, end);
+        selection.removeAllRanges();
+        selection.addRange(wordRange);
       }
-    }
-
-    toolbar.addEventListener('mouseenter', () => {
-      isOverToolbar = true;
-      clearTimeout(hoverTimer);
     });
-    toolbar.addEventListener('mouseleave', () => {
-      isOverToolbar = false;
-      hideToolbar();
-    });
 
-    function doHighlight() {
-      const sel = window.getSelection();
-      if (!sel.rangeCount || sel.isCollapsed) return;
-      const range = sel.getRangeAt(0);
-      const mark = document.createElement('mark');
-      try {
-        range.surroundContents(mark);
-      } catch (e) {
-        const span = document.createElement('span');
-        span.className = 'highlight';
-        span.appendChild(range.extractContents());
-        range.insertNode(span);
-      }
-      sel.removeAllRanges();
-      hideToolbar();
-      saveHighlights();
-    }
 
-    function doClearHighlight() {
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
-      let node = sel.anchorNode;
-      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-      const el = node.closest('mark, .highlight');
-      if (el) {
-        const parent = el.parentNode;
-        while (el.firstChild) parent.insertBefore(el.firstChild, el);
-        parent.removeChild(el);
-        saveHighlights();
-      }
-      sel.removeAllRanges();
-      hideToolbar();
-    }
+    // --- 3. 按 Ctrl 键弹出高亮/清除菜单 ---
+    const menu = document.getElementById('highlight-menu');
+    let savedRange = null;
 
-    function saveHighlights() {
-      const section = document.querySelector('.markdown-section');
-      if (!section) return;
-      const path = location.hash || '#/';
-      let data = JSON.parse(localStorage.getItem('lie-highlights') || '{}');
-      data[path] = section.innerHTML;
-      localStorage.setItem('lie-highlights', JSON.stringify(data));
-    }
-
-    function restoreHighlights() {
-      const section = document.querySelector('.markdown-section');
-      if (!section) return;
-      const path = location.hash || '#/';
-      const data = JSON.parse(localStorage.getItem('lie-highlights') || '{}');
-      if (data[path]) section.innerHTML = data[path];
-    }
-
-    // ==================== 3. 鼠标在选中内容上停留超过 0.5 秒弹出菜单 ====================
-    document.addEventListener('mousemove', function(e) {
-      if (isOverToolbar) return;
-
-      const sel = window.getSelection();
-      // 没有选中内容时直接隐藏
-      if (!sel.rangeCount || sel.isCollapsed) {
-        clearTimeout(hoverTimer);
-        hideToolbar();
-        return;
-      }
-
-      // 检查鼠标是否在选中区域内
-      const range = sel.getRangeAt(0);
-      const rects = range.getClientRects();
-      let isOverSelection = false;
-
-      for (let rect of rects) {
-        if (e.clientX >= rect.left && e.clientX <= rect.right &&
-            e.clientY >= rect.top  && e.clientY <= rect.bottom) {
-          isOverSelection = true;
-          break;
+    document.addEventListener('keydown', function (e) {
+      // 捕获 Ctrl 键（或 Mac 上的 Control 键）
+      if (e.key === 'Control' || e.ctrlKey) {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed && selection.toString().trim() !== '') {
+          savedRange = selection.getRangeAt(0).cloneRange();
+          const rect = savedRange.getBoundingClientRect();
+          
+          // 定位菜单到选中区域上方
+          menu.style.left = `${rect.left + window.scrollX}px`;
+          menu.style.top = `${rect.top + window.scrollY - 40}px`;
+          menu.style.display = 'flex';
         }
       }
+    });
 
-      if (isOverSelection) {
-        clearTimeout(hoverTimer);
-        hoverTimer = setTimeout(() => {
-          // 再次确认还有选中内容
-          const currentSel = window.getSelection();
-          if (currentSel.rangeCount && !currentSel.isCollapsed) {
-            const r = currentSel.getRangeAt(0);
-            const rect = r.getBoundingClientRect();
-            showToolbar(rect.left + rect.width / 2 + window.scrollX,
-                        rect.top + window.scrollY);
-          }
-        }, 500); // 停留 0.5 秒
-      } else {
-        clearTimeout(hoverTimer);
-        hideToolbar();
+    // 隐藏菜单逻辑（点击页面其它地方）
+    document.addEventListener('mousedown', function (e) {
+      if (!menu.contains(e.target)) {
+        menu.style.display = 'none';
       }
     });
 
-    // 页面切换时恢复高亮
-    window.addEventListener('hashchange', () => {
-      hideToolbar();
-      setTimeout(restoreHighlights, 300);
+    // 执行高亮
+    document.getElementById('btn-do-highlight').addEventListener('click', function () {
+      if (!savedRange) return;
+      const mark = document.createElement('mark');
+      mark.className = 'user-highlight';
+      
+      try {
+        savedRange.surroundContents(mark);
+      } catch (err) {
+        // 跨节点选择时的兜底处理
+        const fragment = savedRange.extractContents();
+        mark.appendChild(fragment);
+        savedRange.insertNode(mark);
+      }
+      
+      window.getSelection().removeAllRanges();
+      menu.style.display = 'none';
+      savedRange = null;
     });
 
-    setTimeout(restoreHighlights, 800);
+    // 彻底清除所有历史高亮
+    document.getElementById('btn-clear-highlights').addEventListener('click', function () {
+      const highlights = document.querySelectorAll('mark.user-highlight');
+      highlights.forEach(mark => {
+        const parent = mark.parentNode;
+        while (mark.firstChild) {
+          parent.insertBefore(mark.firstChild, mark);
+        }
+        parent.removeChild(mark);
+        parent.normalize(); // 合并相邻的文本节点
+      });
+      
+      window.getSelection().removeAllRanges();
+      menu.style.display = 'none';
+      savedRange = null;
+    });
   </script>
 </body>
 </html>
