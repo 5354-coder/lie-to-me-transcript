@@ -13,13 +13,11 @@
       font-size: var(--font-size) !important;
       line-height: 1.7;
     }
-    /* 高亮样式 */
     mark, .highlight {
       background-color: #ffe066;
       padding: 1px 2px;
       border-radius: 2px;
     }
-    /* 右上角控制栏 */
     #controls {
       position: fixed;
       top: 12px;
@@ -50,6 +48,10 @@
       min-width: 36px;
       text-align: center;
     }
+    /* 悬停选词时的提示 */
+    .hover-select-active {
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -59,6 +61,7 @@
     <button onclick="changeFont(1)" title="放大字体">A+</button>
     <button onclick="highlightSelection()" title="高亮选中文字 (或按 H 键)">高亮</button>
     <button onclick="clearHighlights()" title="清除所有高亮">清除</button>
+    <button id="hover-btn" onclick="toggleHoverSelect()" title="开启/关闭悬停选词">悬停选词: 关</button>
   </div>
 
   <div id="app">加载中...</div>
@@ -75,7 +78,7 @@
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
 
   <script>
-    // ========== 字体大小调节 ==========
+    // ========== 字体大小 ==========
     let currentSize = parseInt(localStorage.getItem('lie-font-size')) || 16;
     document.documentElement.style.setProperty('--font-size', currentSize + 'px');
     document.getElementById('font-size-label').textContent = currentSize;
@@ -93,19 +96,10 @@
       if (!selection.rangeCount || selection.isCollapsed) return;
 
       const range = selection.getRangeAt(0);
-      // 只允许在正文区域高亮
-      if (!range.commonAncestorContainer.closest || 
-          !range.commonAncestorContainer.closest('.markdown-section')) {
-        // 兼容处理
-        const container = range.commonAncestorContainer.parentElement;
-        if (!container.closest('.markdown-section')) return;
-      }
-
       const mark = document.createElement('mark');
       try {
         range.surroundContents(mark);
       } catch (e) {
-        // 跨节点时用更稳妥的方式
         const span = document.createElement('span');
         span.className = 'highlight';
         span.appendChild(range.extractContents());
@@ -115,7 +109,6 @@
       saveHighlights();
     }
 
-    // 按 H 键高亮
     document.addEventListener('keydown', function(e) {
       if (e.key.toLowerCase() === 'h' && !e.ctrlKey && !e.metaKey) {
         const active = document.activeElement;
@@ -124,18 +117,15 @@
       }
     });
 
-    // 保存高亮到 localStorage
     function saveHighlights() {
       const section = document.querySelector('.markdown-section');
       if (!section) return;
-      const html = section.innerHTML;
       const path = location.hash || '#/';
       let data = JSON.parse(localStorage.getItem('lie-highlights') || '{}');
-      data[path] = html;
+      data[path] = section.innerHTML;
       localStorage.setItem('lie-highlights', JSON.stringify(data));
     }
 
-    // 恢复高亮
     function restoreHighlights() {
       const section = document.querySelector('.markdown-section');
       if (!section) return;
@@ -146,7 +136,6 @@
       }
     }
 
-    // 清除当前页高亮
     function clearHighlights() {
       const section = document.querySelector('.markdown-section');
       if (!section) return;
@@ -158,13 +147,91 @@
       saveHighlights();
     }
 
-    // Docsify 页面切换后恢复高亮
-    window.addEventListener('hashchange', function() {
-      setTimeout(restoreHighlights, 300);
+    // ========== 悬停自动选中单词 ==========
+    let hoverSelectEnabled = localStorage.getItem('lie-hover-select') === 'true';
+
+    function toggleHoverSelect() {
+      hoverSelectEnabled = !hoverSelectEnabled;
+      localStorage.setItem('lie-hover-select', hoverSelectEnabled);
+      updateHoverButton();
+      const section = document.querySelector('.markdown-section');
+      if (section) {
+        section.classList.toggle('hover-select-active', hoverSelectEnabled);
+      }
+    }
+
+    function updateHoverButton() {
+      const btn = document.getElementById('hover-btn');
+      btn.textContent = '悬停选词: ' + (hoverSelectEnabled ? '开' : '关');
+    }
+
+    // 根据鼠标位置选中单词
+    function selectWordAtPoint(x, y) {
+      let range;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(x, y);
+      } else if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+      }
+      if (!range) return;
+
+      const node = range.startContainer;
+      if (node.nodeType !== Node.TEXT_NODE) return;
+
+      const text = node.textContent;
+      let start = range.startOffset;
+      let end = start;
+
+      // 向左找到单词边界
+      while (start > 0 && /[\w''-]/.test(text[start - 1])) {
+        start--;
+      }
+      // 向右找到单词边界
+      while (end < text.length && /[\w''-]/.test(text[end])) {
+        end++;
+      }
+
+      if (start === end) return;
+
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      const wordRange = document.createRange();
+      wordRange.setStart(node, start);
+      wordRange.setEnd(node, end);
+      sel.addRange(wordRange);
+    }
+
+    // 监听鼠标移动
+    let hoverTimer = null;
+    document.addEventListener('mousemove', function(e) {
+      if (!hoverSelectEnabled) return;
+      const section = document.querySelector('.markdown-section');
+      if (!section || !section.contains(e.target)) return;
+
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => {
+        selectWordAtPoint(e.clientX, e.clientY);
+      }, 80); // 轻微延迟，避免太灵敏
     });
 
-    // 首次加载后也尝试恢复
-    setTimeout(restoreHighlights, 800);
+    // 页面切换后恢复
+    window.addEventListener('hashchange', function() {
+      setTimeout(() => {
+        restoreHighlights();
+        const section = document.querySelector('.markdown-section');
+        if (section) section.classList.toggle('hover-select-active', hoverSelectEnabled);
+      }, 300);
+    });
+
+    // 初始化
+    updateHoverButton();
+    setTimeout(() => {
+      restoreHighlights();
+      const section = document.querySelector('.markdown-section');
+      if (section) section.classList.toggle('hover-select-active', hoverSelectEnabled);
+    }, 800);
   </script>
 </body>
 </html>
