@@ -51,7 +51,7 @@
     #word-toolbar {
       position: absolute;
       display: none;
-      background: rgba(255, 255, 255, 0.92);
+      background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(6px);
       border: 1px solid rgba(0,0,0,0.12);
       border-radius: 8px;
@@ -77,16 +77,17 @@
   </style>
 </head>
 <body>
+  <!-- 1. 右上角字体调节 -->
   <div id="controls">
     <button onclick="changeFont(-1)">A-</button>
     <span id="font-size-label">16</span>
     <button onclick="changeFont(1)">A+</button>
-    <button id="hover-btn" onclick="toggleHoverSelect()">悬停选词: 关</button>
   </div>
 
+  <!-- 高亮菜单 -->
   <div id="word-toolbar">
-    <button onclick="highlightSelection()">高亮</button>
-    <button onclick="clearCurrentHighlight()">取消高亮</button>
+    <button onclick="doHighlight()">高亮</button>
+    <button onclick="doClearHighlight()">取消高亮</button>
   </div>
 
   <div id="app">加载中...</div>
@@ -103,7 +104,7 @@
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
 
   <script>
-    // 字体
+    // ==================== 1. 字体大小 ====================
     let currentSize = parseInt(localStorage.getItem('lie-font-size')) || 16;
     document.documentElement.style.setProperty('--font-size', currentSize + 'px');
     document.getElementById('font-size-label').textContent = currentSize;
@@ -115,11 +116,30 @@
       localStorage.setItem('lie-font-size', currentSize);
     }
 
-    // 高亮函数
-    function highlightSelection() {
-      const selection = window.getSelection();
-      if (!selection.rangeCount || selection.isCollapsed) return;
-      const range = selection.getRangeAt(0);
+    // ==================== 高亮工具 ====================
+    const toolbar = document.getElementById('word-toolbar');
+    let isOverToolbar = false;
+
+    function showToolbar(x, y) {
+      toolbar.style.display = 'flex';
+      toolbar.style.left = Math.max(8, x - toolbar.offsetWidth / 2) + 'px';
+      toolbar.style.top = (y - 28) + 'px';
+    }
+
+    function hideToolbar() {
+      if (!isOverToolbar) toolbar.style.display = 'none';
+    }
+
+    toolbar.addEventListener('mouseenter', () => isOverToolbar = true);
+    toolbar.addEventListener('mouseleave', () => {
+      isOverToolbar = false;
+      hideToolbar();
+    });
+
+    function doHighlight() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount || sel.isCollapsed) return;
+      const range = sel.getRangeAt(0);
       const mark = document.createElement('mark');
       try {
         range.surroundContents(mark);
@@ -129,38 +149,38 @@
         span.appendChild(range.extractContents());
         range.insertNode(span);
       }
-      selection.removeAllRanges();
+      sel.removeAllRanges();
       hideToolbar();
       saveHighlights();
     }
 
-    function clearCurrentHighlight() {
-      const selection = window.getSelection();
-      if (!selection.rangeCount) return;
-      let node = selection.anchorNode;
+    function doClearHighlight() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      let node = sel.anchorNode;
       if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-      const highlightEl = node.closest('mark, .highlight');
-      if (highlightEl) {
-        const parent = highlightEl.parentNode;
-        while (highlightEl.firstChild) parent.insertBefore(highlightEl.firstChild, highlightEl);
-        parent.removeChild(highlightEl);
+      const el = node.closest('mark, .highlight');
+      if (el) {
+        const parent = el.parentNode;
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        parent.removeChild(el);
         saveHighlights();
       }
-      selection.removeAllRanges();
+      sel.removeAllRanges();
       hideToolbar();
     }
 
-    // 仅在 Ctrl+拖选时使用的切换高亮
-    function toggleHighlightOnSelection() {
-      const selection = window.getSelection();
-      if (!selection.rangeCount || selection.isCollapsed) return;
+    // Ctrl+拖选切换高亮
+    function toggleHighlight() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount || sel.isCollapsed) return;
 
-      const range = selection.getRangeAt(0);
+      const range = sel.getRangeAt(0);
       let node = range.commonAncestorContainer;
       if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
       const existing = node.closest('mark, .highlight');
 
-      if (existing && existing.textContent.trim() === selection.toString().trim()) {
+      if (existing && existing.textContent.trim() === sel.toString().trim()) {
         const parent = existing.parentNode;
         while (existing.firstChild) parent.insertBefore(existing.firstChild, existing);
         parent.removeChild(existing);
@@ -175,7 +195,7 @@
           range.insertNode(span);
         }
       }
-      selection.removeAllRanges();
+      sel.removeAllRanges();
       hideToolbar();
       saveHighlights();
     }
@@ -197,155 +217,72 @@
       if (data[path]) section.innerHTML = data[path];
     }
 
-    // 状态
-    let hoverSelectEnabled = localStorage.getItem('lie-hover-select') === 'true';
-    const toolbar = document.getElementById('word-toolbar');
-    let isOverToolbar = false;
-    let isMouseDown = false;
-    let hasDragged = false;
-    let ctrlPressed = false;
+    // ==================== 2. 双击选词并弹出菜单 ====================
+    document.addEventListener('dblclick', function(e) {
+      const section = document.querySelector('.markdown-section');
+      if (!section || !section.contains(e.target)) return;
 
-    function toggleHoverSelect() {
-      hoverSelectEnabled = !hoverSelectEnabled;
-      localStorage.setItem('lie-hover-select', hoverSelectEnabled);
-      updateHoverButton();
-      if (!hoverSelectEnabled) hideToolbar();
-    }
-
-    function updateHoverButton() {
-      document.getElementById('hover-btn').textContent =
-        '悬停选词: ' + (hoverSelectEnabled ? '开' : '关');
-    }
-
-    function showToolbar(x, y) {
-      toolbar.style.display = 'flex';
-      toolbar.style.left = Math.max(8, x - toolbar.offsetWidth / 2) + 'px';
-      toolbar.style.top = (y - 28) + 'px';
-    }
-
-    function hideToolbar() {
-      if (!isOverToolbar) toolbar.style.display = 'none';
-    }
-
-    toolbar.addEventListener('mouseenter', () => { isOverToolbar = true; });
-    toolbar.addEventListener('mouseleave', () => {
-      isOverToolbar = false;
-      hideToolbar();
+      // 双击后浏览器已经选中了单词，我们只需弹出菜单
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (sel.rangeCount && !sel.isCollapsed) {
+          const range = sel.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          showToolbar(rect.left + rect.width / 2 + window.scrollX,
+                      rect.top + window.scrollY);
+        }
+      }, 10);
     });
 
-    // Ctrl 键监听
-    document.addEventListener('keydown', (e) => {
+    // 点击其他地方关闭菜单
+    document.addEventListener('click', function(e) {
+      if (!toolbar.contains(e.target)) {
+        setTimeout(hideToolbar, 50);
+      }
+    });
+
+    // ==================== 3. Ctrl + 拖选自动切换高亮 ====================
+    let ctrlPressed = false;
+    let isDragging = false;
+
+    document.addEventListener('keydown', e => {
       if (e.key === 'Control') ctrlPressed = true;
     });
-    document.addEventListener('keyup', (e) => {
+    document.addEventListener('keyup', e => {
       if (e.key === 'Control') ctrlPressed = false;
     });
-    window.addEventListener('blur', () => { ctrlPressed = false; });
+    window.addEventListener('blur', () => ctrlPressed = false);
 
-    // 鼠标事件
-    document.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      isMouseDown = true;
-      hasDragged = false;
-      hideToolbar();
+    document.addEventListener('mousedown', e => {
+      if (e.button === 0) isDragging = false;
     });
 
-    document.addEventListener('mousemove', (e) => {
-      if (isMouseDown) hasDragged = true;
+    document.addEventListener('mousemove', e => {
+      if (e.buttons === 1) isDragging = true;
     });
 
-    document.addEventListener('mouseup', (e) => {
+    document.addEventListener('mouseup', e => {
       if (e.button !== 0) return;
-      isMouseDown = false;
 
-      // 只有按住 Ctrl 并且拖选时，才自动切换高亮
-      if (ctrlPressed && hasDragged) {
+      if (ctrlPressed && isDragging) {
         setTimeout(() => {
           const sel = window.getSelection();
           if (sel.rangeCount && !sel.isCollapsed) {
             const section = document.querySelector('.markdown-section');
             if (section && section.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-              toggleHighlightOnSelection();
+              toggleHighlight();
             }
           }
         }, 10);
       }
-      // 注意：普通拖选（没有 Ctrl）什么都不做，只保留选中状态
     });
 
-    // 点击弹出菜单（仅非 Ctrl、非拖选）
-    document.addEventListener('click', (e) => {
-      if (!hoverSelectEnabled || ctrlPressed || hasDragged) return;
-      if (toolbar.contains(e.target)) return;
-
-      const section = document.querySelector('.markdown-section');
-      if (!section || !section.contains(e.target)) {
-        hideToolbar();
-        return;
-      }
-
-      const sel = window.getSelection();
-      if (sel.rangeCount && !sel.isCollapsed) {
-        const range = sel.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        showToolbar(rect.left + rect.width / 2 + window.scrollX,
-                    rect.top + window.scrollY);
-      }
-    });
-
-    // 悬停选词（Ctrl 按下时禁用）
-    function selectWordAtPoint(x, y) {
-      if (isMouseDown || ctrlPressed) return;
-
-      let range;
-      if (document.caretRangeFromPoint) {
-        range = document.caretRangeFromPoint(x, y);
-      } else if (document.caretPositionFromPoint) {
-        const pos = document.caretPositionFromPoint(x, y);
-        range = document.createRange();
-        range.setStart(pos.offsetNode, pos.offset);
-      }
-      if (!range) return;
-
-      const node = range.startContainer;
-      if (node.nodeType !== Node.TEXT_NODE) return;
-
-      const text = node.textContent;
-      let start = range.startOffset;
-      let end = start;
-
-      while (start > 0 && /[\w''-]/.test(text[start - 1])) start--;
-      while (end < text.length && /[\w''-]/.test(text[end])) end++;
-      if (start === end) return;
-
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      const wordRange = document.createRange();
-      wordRange.setStart(node, start);
-      wordRange.setEnd(node, end);
-      sel.addRange(wordRange);
-    }
-
-    let hoverTimer = null;
-    document.addEventListener('mousemove', function(e) {
-      if (!hoverSelectEnabled || isMouseDown || ctrlPressed) return;
-      if (toolbar.contains(e.target)) return;
-
-      const section = document.querySelector('.markdown-section');
-      if (!section || !section.contains(e.target)) return;
-
-      clearTimeout(hoverTimer);
-      hoverTimer = setTimeout(() => {
-        selectWordAtPoint(e.clientX, e.clientY);
-      }, 80);
-    });
-
-    window.addEventListener('hashchange', function() {
+    // 页面切换恢复高亮
+    window.addEventListener('hashchange', () => {
       hideToolbar();
       setTimeout(restoreHighlights, 300);
     });
 
-    updateHoverButton();
     setTimeout(restoreHighlights, 800);
   </script>
 </body>
